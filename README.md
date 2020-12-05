@@ -3,11 +3,11 @@
 # Intro
 
 Lango Quick is a microservice to serve your i18n json file on the fly.
-It caches the whole internalization json file in to memory.
+It caches the whole internalization json in to memory.
 
 # Links
 
-1. (Firebase Translations)[https://firebase.google.com/docs/ml-kit/translation]
+1. [Firebase Translations](https://firebase.google.com/docs/ml-kit/translation)
 
 # Environment
 
@@ -19,9 +19,9 @@ No production yet
 
 # What do I need to get started
 
-1. (docker)[https://docs.docker.com/get-docker/]
-2. (docker-compose)[https://docs.docker.com/compose/install/]
-3. (Firebase)[https://firebase.google.com/]
+1. [docker](https://docs.docker.com/get-docker/)
+2. [docker-compose](https://docs.docker.com/compose/install/)
+3. [Firebase](https://firebase.google.com/)
 
 # How to setup the project
 
@@ -31,14 +31,14 @@ No production yet
 
 # Dev commands
 
-- `go run .`
-- `docker-compose up -d` then `docker exec -it lango_quick /bash/bin`
+- ```go run .```
+- ```docker-compose up -d``` then ```docker exec -it lango_quick /bash/bin```
 
 # Build commands
 
-- `docker-compose up -d`
-- `go run .`
-- `docker build .`
+- ```docker-compose up -d```
+- ```go run .```
+- ```docker build .```
   If in docker, please state Docker commands here
 
 # Contribution
@@ -89,5 +89,5 @@ const timeStart = Date.now();
 
 This microservice has only one endpoint but two different endpoint calls are possible:
 
-1. `localhost:8080/translations` - to get translations for all inputs at once
-2. `localhost:8080/translations?input=Bailout%20gases` - to get translation for specific input
+1. ```localhost:8080/translations``` - to get translations for all inputs at once
+2. ```localhost:8080/translations?input=Bailout%20gases``` - to get translation for specific input
