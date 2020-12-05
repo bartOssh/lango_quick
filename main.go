@@ -110,8 +110,8 @@ func init() {
 	rawBody := bytes.NewBuffer(postBody)
 
 	tr := &http.Transport{
-		MaxIdleConns:       10,
-		IdleConnTimeout:    30 * time.Second,
+		MaxIdleConns:       MaxIdleConn,
+		IdleConnTimeout:    IdleConnTimeout * time.Second,
 		DisableCompression: true,
 	}
 	client := &http.Client{Transport: tr}
