@@ -50,13 +50,13 @@ func getByInput(input string) *CachedTranslation {
 }
 
 func sendTranslations(w http.ResponseWriter, r *http.Request) {
-	atomicRWTranslations.mu.RLock()
-	defer atomicRWTranslations.mu.RUnlock()
 	if lang, ok := r.URL.Query()["input"]; ok {
 		ct := getByInput(lang[0])
 		json.NewEncoder(w).Encode(ct)
 		return
 	}
+	atomicRWTranslations.mu.RLock()
+	defer atomicRWTranslations.mu.RUnlock()
 	json.NewEncoder(w).Encode(atomicRWTranslations.ct)
 }
 
