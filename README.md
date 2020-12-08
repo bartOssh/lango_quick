@@ -1,55 +1,116 @@
 # Lango Quick
 
-# Intro
+## Intro
 
 Lango Quick is a microservice to serve your i18n json file on the fly.
 It caches the whole internalization json in to memory.
 
-# Links
+## Links
 
 1. [Firebase Translations](https://firebase.google.com/docs/ml-kit/translation)
 
-# Environment
+## Environment
 
-1. Runs on localhost:8080, to change it set proper environment variable in `.env` and map ports in `docker-compose.yal`
+1. Runs on localhost:8080, to change it set proper environment variable in `.env` and map ports in `docker-compose.yml`
 
 ## Production environment details
 
 No production yet
 
-# What do I need to get started
+## What do I need to get started
 
 1. [docker](https://docs.docker.com/get-docker/)
 2. [docker-compose](https://docs.docker.com/compose/install/)
 3. [Firebase](https://firebase.google.com/)
 
-# How to setup the project
+## How to setup the project
 
 - install docker and docker-compose
 - set up Firebase account and get credentials
 - point to your firebase functions API
 
-# Dev commands
+## Dev commands (pick one from below )
 
-- ```go run .```
-- ```docker-compose up -d``` then ```docker exec -it lango_quick /bash/bin```
+- ```go run .``` if you have go 1.15 or higher on your machine
+- ```docker-compose up -d``` then ```docker exec -it lango_quick /bash/bin``` to develop in docker container
 
-# Build commands
+## Build commands (pick one from below)
 
 - ```docker-compose up -d```
 - ```go run .```
 - ```docker build .```
   If in docker, please state Docker commands here
 
-# Contribution
+## Contribution
 
 Clone the repo and send merge request with proposed feature, fix or change
 
-# Pushing to production
+## Pushing to production
 
 No prod yet
 
-# Testing
+
+## Firebase function example
+
+```typescript
+import { firebase, functions } from '../lib/firebase'
+import express, { Request, Response, NextFunction } from 'express'
+import cors from 'cors'
+
+const app = express()
+
+app.use(cors({ origin: true }))
+app.use(express.json())
+app.set('trust proxy', 1)
+
+// Checks if user is authorized to use rsx api
+const checkIfAuthorized = async (req: Request, res: Response, next: NextFunction) => {
+  const email: string = req.body.email
+  const token: string = req.body.token
+  if (!email?.length || !token?.length) {
+    res.sendStatus(400).end()
+    return
+  }
+  try {
+    const user = await firebase.auth().getUserByEmail(email)
+    const decodedToken = await firebase.auth().verifyIdToken(token)
+    const customClaims = <{ admin: boolean; rsxDeveloper: boolean; rsxService?: boolean }>user.customClaims || null
+    const isAdmin =
+      (decodedToken.admin && customClaims.admin) ||
+      (decodedToken.rsxDeveloper && customClaims.rsxDeveloper) ||
+      (decodedToken.rsxService && customClaims?.rsxService)
+    if (!isAdmin) {
+      res.sendStatus(401).end()
+      return
+    }
+    next()
+  } catch (e) {
+    console.error(e)
+    res.sendStatus(401).end()
+  }
+}
+
+// Serves translations
+app.post('/translations', checkIfAuthorized, async (_: Request, res: Response) => {
+  try {
+    const results: any[] = []
+    const snapshot = await db.collection(collections.translations).get()
+    snapshot.forEach((r: FirebaseFirestore.QueryDocumentSnapshot<FirebaseFirestore.DocumentData>) => {
+      const result = r.data()
+      results.push(result)
+    })
+    res.json(results).end()
+  } catch (e) {
+    console.error(e)
+    res.sendStatus(401).end()
+  }
+  return
+})
+
+export const myApi = functions.https.onRequest(app)
+```
+
+## Testing
 
 ```javascript
 const options = {
