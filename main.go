@@ -60,40 +60,6 @@ func sendTranslations(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(atomicRWTranslations.ct)
 }
 
-func main() {
-	srvAddressAndPort := os.Getenv("SERVER_ADDRESS_AND_PORT")
-	router := mux.NewRouter()
-	router.HandleFunc("/translations", sendTranslations).Methods("GET")
-
-	srv := &http.Server{
-		Handler:      router,
-		Addr:         srvAddressAndPort,
-		WriteTimeout: WriteTimeoutS * time.Second,
-		ReadTimeout:  ReadTimeoutS * time.Second,
-	}
-
-	go func() {
-		log.Printf("server started on %s", srvAddressAndPort)
-		if err := srv.ListenAndServe(); err != nil {
-			log.Println(err)
-		}
-	}()
-
-	c := make(chan os.Signal, 1)
-
-	signal.Notify(c, os.Interrupt)
-
-	<-c
-
-	wait := time.Duration(ShoutDownTimeoutS) * time.Second
-	ctx, cancel := context.WithTimeout(context.Background(), wait)
-	defer cancel()
-
-	srv.Shutdown(ctx)
-	log.Println("shutting down server")
-	os.Exit(0)
-}
-
 func init() {
 	godotenv.Load()
 	fBToken := os.Getenv("FIREBASE_FUNC_TOKEN")
@@ -144,5 +110,39 @@ func init() {
 		languageMap.Store(t.Input, t.Translated)
 	}
 	log.Printf("properly initialized lango quick microservice with translations map of size %v translations", len(*atomicRWTranslations.ct))
+}
 
+func main() {
+	srvAddressAndPort := os.Getenv("SERVER_ADDRESS_AND_PORT")
+	router := mux.NewRouter()
+	router.HandleFunc("/translations", sendTranslations).Methods("GET")
+
+	srv := &http.Server{
+		Handler:      router,
+		Addr:         srvAddressAndPort,
+		WriteTimeout: WriteTimeoutS * time.Second,
+		ReadTimeout:  ReadTimeoutS * time.Second,
+	}
+
+	go func() {
+		log.Printf("server started on %s", srvAddressAndPort)
+		if err := srv.ListenAndServe(); err != nil {
+			log.Println(err)
+		}
+	}()
+
+	c := make(chan os.Signal, 1)
+
+	signal.Notify(c, os.Interrupt)
+
+	<-c
+	close(c)
+
+	wait := time.Duration(ShoutDownTimeoutS) * time.Second
+	ctx, cancel := context.WithTimeout(context.Background(), wait)
+	defer cancel()
+
+	srv.Shutdown(ctx)
+	log.Println("shutting down server")
+	os.Exit(0)
 }
