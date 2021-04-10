@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/kataras/iris/v12"
+	"github.com/pterm/pterm"
 )
 
 // FirebaseTranslations relation input to translations
@@ -25,9 +27,17 @@ var atomicRWTranslations struct {
 	ct *map[string]map[string]string
 }
 
-func mapToLanguage(ct []FirebaseTranslations) *map[string]map[string]string {
+func mapToLanguage(ft []FirebaseTranslations) *map[string]map[string]string {
+	progressbar, err := pterm.DefaultProgressbar.WithTotal(len(ft)).Start()
+	if err != nil {
+		panic(err)
+	}
+	defer progressbar.Stop()
 	languages := make(map[string]map[string]string)
-	for _, group := range ct {
+	for i, group := range ft {
+		progressbar.Title = fmt.Sprintf("Adding %v translation", i)
+		pterm.Success.Printf("Translation %v added", i)
+		progressbar.Increment()
 		for ln, trans := range group.Translated {
 			if l, ok := languages[ln]; ok {
 				if _, oko := l[group.Input]; !oko {
@@ -63,6 +73,12 @@ func getTranslations(ctx iris.Context) {
 }
 
 func init() {
+
+	header := pterm.DefaultHeader.WithBackgroundStyle(pterm.NewStyle(pterm.BgRed))
+	pterm.DefaultCenter.Println(header.Sprint("Foodie Translations Micro-service"))
+
+	_ = pterm.DefaultBigText.WithLetters(pterm.NewLettersFromString("Lan_go quick")).Render()
+
 	godotenv.Load()
 	fBToken := os.Getenv("FIREBASE_FUNC_TOKEN")
 	fBTranslationAddress := os.Getenv("FIREBASE_FUNC_ADDRESS")
@@ -102,8 +118,7 @@ func init() {
 		if e, ok := err.(*json.SyntaxError); ok {
 			log.Printf("syntax error at byte offset %d", e.Offset)
 		}
-		log.Printf("response: %q", result)
-		log.Fatalf("cennot unmarshal firebase translation result %s", err)
+		log.Fatalf("cennot unmarshal firebase translation result %s for response %s", err, result)
 	}
 
 	atomicRWTranslations.mu = sync.RWMutex{}
@@ -111,7 +126,7 @@ func init() {
 	defer atomicRWTranslations.mu.Unlock()
 	atomicRWTranslations.ct = mapToLanguage(*translations)
 
-	log.Printf("properly initialized lango quick microservice with for %v languages", len(*atomicRWTranslations.ct))
+	pterm.DefaultSection.Printf("properly initialized lango quick microservice with %v languages", len(*atomicRWTranslations.ct))
 }
 
 func main() {
