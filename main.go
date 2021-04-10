@@ -2,62 +2,64 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
-	"os/signal"
 	"sync"
 	"time"
 
-	"github.com/gorilla/mux"
 	"github.com/joho/godotenv"
+	"github.com/kataras/iris/v12"
 )
 
-// Translations to popular languages
-type Translations struct {
-	Ru string `json:"ru"`
-	En string `json:"en"`
-	Pl string `json:"pl"`
-	Es string `json:"es"`
-	Fr string `json:"fr"`
-	De string `json:"de"`
-}
-
-// CachedTranslation relation input to translations
-type CachedTranslation struct {
+// FirebaseTranslations relation input to translations
+type FirebaseTranslations struct {
 	Input      string       `json:"input"`
-	Translated Translations `json:"translated"`
+	Translated map[string]string `json:"translated"`
 }
 
 var atomicRWTranslations struct {
 	mu sync.RWMutex
-	ct *[]CachedTranslation
+	ct *map[string]map[string]string
 }
 
-var languageMap sync.Map
-
-func getByInput(input string) *CachedTranslation {
-	if t, ok := languageMap.Load(input); ok {
-		return &CachedTranslation{
-			Input:      input,
-			Translated: t.(Translations),
+func mapToLanguage(ct []FirebaseTranslations) *map[string]map[string]string {
+	languages := make(map[string]map[string]string)
+	for _, group := range ct {
+		for ln, trans := range group.Translated {
+			if l, ok := languages[ln]; ok {
+				if _, oko := l[group.Input]; !oko {
+					l[group.Input] = trans
+					languages[ln] = l
+				}
+			} else {
+				l := make(map[string]string)
+				l[group.Input] = trans
+				languages[ln] = l
+			}
 		}
 	}
-	return nil
+	return &languages
 }
 
-func sendTranslations(w http.ResponseWriter, r *http.Request) {
-	if lang, ok := r.URL.Query()["input"]; ok {
-		ct := getByInput(lang[0])
-		json.NewEncoder(w).Encode(ct)
+func getTranslations(ctx iris.Context) {
+	lang := ctx.Params().GetString("ln")
+  
+	if lang == "" {
+		ctx.StatusCode(http.StatusBadRequest)
 		return
 	}
+	
 	atomicRWTranslations.mu.RLock()
 	defer atomicRWTranslations.mu.RUnlock()
-	json.NewEncoder(w).Encode(atomicRWTranslations.ct)
+	translations, ok := (*atomicRWTranslations.ct)[lang]
+	if !ok {
+		ctx.StatusCode(http.StatusBadRequest)
+		return
+	}
+	ctx.JSON(translations)
 }
 
 func init() {
@@ -73,7 +75,6 @@ func init() {
 	if err != nil {
 		log.Fatalf("cannot initialize post body, error: %s", err)
 	}
-	rawBody := bytes.NewBuffer(postBody)
 
 	tr := &http.Transport{
 		MaxIdleConns:       MaxIdleConn,
@@ -81,7 +82,8 @@ func init() {
 		DisableCompression: true,
 	}
 	client := &http.Client{Transport: tr}
-
+	
+	rawBody := bytes.NewBuffer(postBody)
 	resp, err := client.Post(fBTranslationAddress, "application/json", rawBody)
 	if err != nil {
 		log.Fatalf("cannot fetch initial translation value, error: %s", err)
@@ -92,8 +94,9 @@ func init() {
 	if err != nil {
 		log.Fatalf("cannot read initial response from firebase translation end point %s", err)
 	}
-	ct := new([]CachedTranslation)
-	err = json.Unmarshal(result, ct)
+
+	translations := new([]FirebaseTranslations)
+	err = json.Unmarshal(result, translations)
 	if err != nil {
 		log.Printf("error decoding response: %v", err)
 		if e, ok := err.(*json.SyntaxError); ok {
@@ -102,47 +105,19 @@ func init() {
 		log.Printf("response: %q", result)
 		log.Fatalf("cennot unmarshal firebase translation result %s", err)
 	}
+
 	atomicRWTranslations.mu = sync.RWMutex{}
 	atomicRWTranslations.mu.Lock()
 	defer atomicRWTranslations.mu.Unlock()
-	atomicRWTranslations.ct = ct
-	for _, t := range *ct {
-		languageMap.Store(t.Input, t.Translated)
-	}
-	log.Printf("properly initialized lango quick microservice with translations map of size %v translations", len(*atomicRWTranslations.ct))
+	atomicRWTranslations.ct = mapToLanguage(*translations)
+
+	log.Printf("properly initialized lango quick microservice with for %v languages", len(*atomicRWTranslations.ct))
 }
 
 func main() {
 	srvAddressAndPort := os.Getenv("SERVER_ADDRESS_AND_PORT")
-	router := mux.NewRouter()
-	router.HandleFunc("/translations", sendTranslations).Methods("GET")
 
-	srv := &http.Server{
-		Handler:      router,
-		Addr:         srvAddressAndPort,
-		WriteTimeout: WriteTimeoutS * time.Second,
-		ReadTimeout:  ReadTimeoutS * time.Second,
-	}
-
-	go func() {
-		log.Printf("server started on %s", srvAddressAndPort)
-		if err := srv.ListenAndServe(); err != nil {
-			log.Println(err)
-		}
-	}()
-
-	c := make(chan os.Signal, 1)
-
-	signal.Notify(c, os.Interrupt)
-
-	<-c
-	close(c)
-
-	wait := time.Duration(ShoutDownTimeoutS) * time.Second
-	ctx, cancel := context.WithTimeout(context.Background(), wait)
-	defer cancel()
-
-	srv.Shutdown(ctx)
-	log.Println("shutting down server")
-	os.Exit(0)
+	app := iris.New()
+  	app.Handle("GET", "/translations/{ln:string}", getTranslations)
+  	app.Listen(srvAddressAndPort)
 }
