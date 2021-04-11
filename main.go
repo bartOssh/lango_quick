@@ -18,10 +18,15 @@ import (
 
 var srvAddressAndPort = "0.0.0.0:8000"
 
-// FirebaseTranslations relation input to translations
-type FirebaseTranslations struct {
+// firebaseTranslations relation input to translations
+type firebaseTranslations struct {
 	Input      string       `json:"input"`
 	Translated map[string]string `json:"translated"`
+}
+
+// requestTranslations allows to decode slice of translations from json request
+type requestTranslations struct {
+	Translate []string `json:"translate"`
 }
 
 var atomicRWTranslations struct {
@@ -29,7 +34,9 @@ var atomicRWTranslations struct {
 	ct *map[string]map[string]string
 }
 
-func mapToLanguage(ft []FirebaseTranslations) *map[string]map[string]string {
+// mapToLanguage iterate through input : translations slice and maps translations per language key like so:
+// {"language_key" : {"translation in english as a key" : "translation to language of the language_key"}}
+func mapToLanguage(ft []firebaseTranslations) *map[string]map[string]string {
 	progressbar, err := pterm.DefaultProgressbar.WithTotal(len(ft)).Start()
 	if err != nil {
 		panic(err)
@@ -62,7 +69,7 @@ func renderEndpoints(ct *map[string]map[string]string, addr string) {
 	}
 
 	for k := range *ct {
-		data = append(data, []string{k, fmt.Sprintf("%s/translations/%s", addr, k)})
+		data = append(data, []string{k, fmt.Sprintf("%s/get/%s", addr, k)})
 	}
 
 
@@ -75,11 +82,11 @@ func renderEndpoints(ct *map[string]map[string]string, addr string) {
 	pterm.DefaultCenter.Println(s)
 }
 
-func getTranslations(ctx iris.Context) {
+func getLanguage(ctx iris.Context) {
 	lang := ctx.Params().GetString("ln")
   
 	if lang == "" {
-		ctx.StatusCode(http.StatusBadRequest)
+		ctx.StatusCode(iris.StatusBadRequest)
 		return
 	}
 	
@@ -87,10 +94,20 @@ func getTranslations(ctx iris.Context) {
 	defer atomicRWTranslations.mu.RUnlock()
 	translations, ok := (*atomicRWTranslations.ct)[lang]
 	if !ok {
-		ctx.StatusCode(http.StatusBadRequest)
+		ctx.StatusCode(iris.StatusBadRequest)
 		return
 	}
 	ctx.JSON(translations)
+}
+
+func createTranslations(ctx iris.Context) {
+	t := &requestTranslations{}
+	err := ctx.ReadJSON(t)
+	if err != nil {
+		ctx.StatusCode(iris.StatusBadRequest)
+	}
+	fmt.Printf("TRANSLATIONS: \n %v \n", t)
+	ctx.StatusCode(iris.StatusAccepted)
 }
 
 func init() {
@@ -134,7 +151,7 @@ func init() {
 		log.Fatalf("cannot read initial response from firebase translation end point %s", err)
 	}
 
-	translations := new([]FirebaseTranslations)
+	translations := new([]firebaseTranslations)
 	err = json.Unmarshal(result, translations)
 	if err != nil {
 		log.Printf("error decoding response: %v", err)
@@ -154,6 +171,7 @@ func init() {
 
 func main() {
 	app := iris.New()
-  	app.Handle("GET", "/translations/{ln:string}", getTranslations)
+  	app.Get("/get/{ln:string}", getLanguage)
+	app.Post("/create", createTranslations)
   	app.Listen(srvAddressAndPort)
 }
